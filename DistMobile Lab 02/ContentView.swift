@@ -9,77 +9,98 @@ import SwiftUI
 import CoreData
 
 struct ContentView: View {
-    @Environment(\.managedObjectContext) private var viewContext
-
-    @FetchRequest(
-        sortDescriptors: [NSSortDescriptor(keyPath: \Item.timestamp, ascending: true)],
-        animation: .default)
-    private var items: FetchedResults<Item>
-
+    @StateObject public var viewModel : HouseViewModel = HouseViewModel()
+    @State public var search : String = ""
+    
+    
     var body: some View {
-        NavigationView {
-            List {
-                ForEach(items) { item in
-                    NavigationLink {
-                        Text("Item at \(item.timestamp!, formatter: itemFormatter)")
-                    } label: {
-                        Text(item.timestamp!, formatter: itemFormatter)
+        NavigationView{
+            VStack(alignment: .leading, spacing: 20){
+                List{
+                    ForEach(viewModel.houses){ house in
+                        HouseCard(house: house)
                     }
                 }
-                .onDelete(perform: deleteItems)
-            }
-            .toolbar {
-                ToolbarItem(placement: .navigationBarTrailing) {
-                    EditButton()
-                }
-                ToolbarItem {
-                    Button(action: addItem) {
-                        Label("Add Item", systemImage: "plus")
+                .searchable(text: $search, prompt: "Search house by Id")
+                .onChange(of: search) { newValue in
+                    if let id = Int(newValue) {
+                        viewModel.fetch(id: id)
+                    }
+                    else{
+                        viewModel.fetch()
                     }
                 }
-            }
-            Text("Select an item")
-        }
-    }
-
-    private func addItem() {
-        withAnimation {
-            let newItem = Item(context: viewContext)
-            newItem.timestamp = Date()
-
-            do {
-                try viewContext.save()
-            } catch {
-                // Replace this implementation with code to handle the error appropriately.
-                // fatalError() causes the application to generate a crash log and terminate. You should not use this function in a shipping application, although it may be useful during development.
-                let nsError = error as NSError
-                fatalError("Unresolved error \(nsError), \(nsError.userInfo)")
-            }
-        }
-    }
-
-    private func deleteItems(offsets: IndexSet) {
-        withAnimation {
-            offsets.map { items[$0] }.forEach(viewContext.delete)
-
-            do {
-                try viewContext.save()
-            } catch {
-                // Replace this implementation with code to handle the error appropriately.
-                // fatalError() causes the application to generate a crash log and terminate. You should not use this function in a shipping application, although it may be useful during development.
-                let nsError = error as NSError
-                fatalError("Unresolved error \(nsError), \(nsError.userInfo)")
-            }
+                .onAppear(){
+                    viewModel.fetch()
+                }
+                .refreshable {
+                    viewModel.fetch()
+                }
+                
+                Text(viewModel.error ?? "")
+            }.navigationTitle("Houses")
         }
     }
 }
 
-private let itemFormatter: DateFormatter = {
-    let formatter = DateFormatter()
-    formatter.dateStyle = .short
-    formatter.timeStyle = .medium
-    return formatter
-}()
+struct HouseCard: View {
+    @State public var house: House
+    
+    var body: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            ZStack(alignment: .bottom) {
+                if let url = URL(string: house.imageUrl) {
+                    AsyncImage(url: url) { image in
+                        image
+                            .resizable()
+                            .aspectRatio(contentMode: .fit)
+                            .frame(maxWidth: .infinity)
+                    } placeholder: {
+                        ProgressView()
+                    }
+                }
+                HStack {
+                    Text(house.sold ? "Sold" : "For Sale")
+                        .padding(5)
+                        .background(house.sold ? Color.red : Color.green)
+                        .foregroundStyle(.white)
+                        .cornerRadius(20)
+                        .padding(7)
+                    Spacer()
+                    Text(house.postingDate)
+                        .padding(5)
+                        .background(Color.black)
+                        .foregroundStyle(.white)
+                        .cornerRadius(20)
+                        .padding(7)
+                }
+            }
+            HStack {
+                Text("$\(house.price)")
+                    .font(.headline)
+                    .fontWeight(.bold)
+                Spacer()
+                Text("\(Image(systemName: house.likes > 0 ? "heart.fill" : "heart")) \(house.likes)")
+            }
+            .padding([.leading, .trailing], 10)
+            
+            VStack(alignment: .leading, spacing: 5) {
+                Text(house.details)
+                    .font(.caption)
+                Text(house.address)
+                    .font(.caption)
+                Text(house.company)
+                    .font(.caption)
+                    .foregroundStyle(Color.gray)
+            }
+            .padding([.leading, .trailing, .bottom], 10)
+        }
+        .background(Color.white)
+        .cornerRadius(10)
+        .shadow(radius: 5)
+    }
+}
+
 
 #Preview {
     ContentView().environment(\.managedObjectContext, PersistenceController.preview.container.viewContext)
